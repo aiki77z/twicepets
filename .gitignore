@@ -23,11 +23,6 @@ Thumbs.db
 !/build/icon.icns
 
 # Pet source/reference/generated assets are local-only.
-# The macOS GitHub Action only needs each final spritesheet.webp.
+# Pet assets are no longer tracked after release packaging.
 */reference/
-!*/hatch-run/
 */hatch-run/**
-!*/hatch-run/final/
-!*/hatch-run/final/**
-*/hatch-run/final/*
-!*/hatch-run/final/spritesheet.webp
