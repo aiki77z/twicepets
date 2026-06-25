@@ -1,0 +1,85 @@
+name: build-mac
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - arm64
+          - x64
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build mac artifacts (dmg + zip)
+        run: npm run dist:mac -- --${{ matrix.arch }} --publish never
+
+      - name: Normalize artifact names
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCH="${{ matrix.arch }}"
+
+          pick_file() {
+            local pattern="$1"
+            local fallback_pattern="$2"
+            local picked
+            picked="$(find dist -maxdepth 1 -type f -name "$pattern" -print 2>/dev/null | sort | head -n 1 || true)"
+            if [ -n "$picked" ]; then
+              printf '%s\n' "$picked"
+              return 0
+            fi
+            find dist -maxdepth 1 -type f -name "$fallback_pattern" -print 2>/dev/null | sort | head -n 1
+          }
+
+          src_dmg="$(pick_file "*$ARCH*.dmg" "*.dmg")"
+          if [ -n "$src_dmg" ]; then
+            if [[ "$src_dmg" != *-"$ARCH".dmg ]]; then
+              mv "$src_dmg" "${src_dmg%.dmg}-$ARCH.dmg"
+            fi
+          fi
+
+          src_zip="$(pick_file "*$ARCH*-mac.zip" "*-mac.zip")"
+          if [ -n "$src_zip" ]; then
+            if [[ "$src_zip" != *-"$ARCH"-mac.zip ]]; then
+              mv "$src_zip" "${src_zip%-mac.zip}-$ARCH-mac.zip"
+            fi
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: TWICE-Pets-mac-${{ matrix.arch }}
+          path: |
+            dist/*-${{ matrix.arch }}.dmg
+            dist/*-${{ matrix.arch }}-mac.zip
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*-${{ matrix.arch }}.dmg
+            dist/*-${{ matrix.arch }}-mac.zip
